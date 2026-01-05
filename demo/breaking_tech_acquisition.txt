@@ -1,0 +1,15 @@
+BREAKING: Major Tech Acquisition Announced
+
+SAN FRANCISCO - In a stunning move, MegaCorp has announced the acquisition of InnovativeAI for $50 billion. The deal, which comes as a surprise to industry analysts, marks the largest AI company acquisition in history.
+
+The acquisition is expected to reshape the competitive landscape in the enterprise AI market. Analysts are predicting significant market movements following this announcement.
+
+MegaCorp's CEO stated: "This strategic move positions us at the forefront of AI innovation. We're committed to accelerating the development of next-generation AI solutions."
+
+Industry experts suggest this could trigger a wave of consolidation in the tech sector. Several smaller AI startups have already seen their valuations spike on speculation of similar deals.
+
+The transaction is subject to regulatory approval and is expected to close in Q2 2025.
+
+---
+
+This file is for DEMO purposes. Drop it into data/breaking_news/ folder to see real-time ingestion in action!

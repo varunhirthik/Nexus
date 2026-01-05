@@ -1,0 +1,28 @@
+# Pathway Framework (core only - faster install)
+pathway>=0.8.0
+
+# RSS Parsing
+feedparser>=6.0.10
+
+# LLM & Embeddings
+google-generativeai>=0.3.0
+litellm>=1.0.0
+
+# Web Framework (FastAPI for REST/WebSocket)
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+websockets>=12.0
+
+# Utilities
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Sentiment Analysis
+textblob>=0.17.1
+
+# Development
+pytest>=7.4.0
+black>=23.0.0
+isort>=5.12.0
+mypy>=1.5.0

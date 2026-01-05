@@ -1,0 +1,22 @@
+# Dependencies - will be installed fresh in container
+node_modules
+
+# Build outputs
+dist
+build
+
+# Development files
+.git
+.gitignore
+*.md
+
+# IDE
+.vscode
+.idea
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

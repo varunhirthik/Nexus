@@ -1,0 +1,21 @@
+MARKET ALERT: Flash Crash Detected
+
+NEW YORK - Markets experienced extreme volatility today as major indices dropped over 5% in minutes before recovering slightly. The rapid sell-off, reminiscent of the 2010 Flash Crash, was triggered by algorithmic trading systems.
+
+The S&P 500 plunged 327 points (5.2%) at its lowest point before recovering to close down 2.1%. Technology stocks led the decline, with several major names seeing circuit breaker halts.
+
+CAUSES:
+- Algorithmic trading cascade
+- Liquidity concerns
+- Geopolitical tensions escalating
+- Federal Reserve policy uncertainty
+
+RECOVERY EFFORTS:
+Trading was briefly halted on several exchanges to allow for price stabilization. Market makers stepped in to provide liquidity, helping stabilize prices.
+
+Federal Reserve officials are monitoring the situation closely and have indicated readiness to intervene if necessary.
+
+Analysts are urging caution, with many suggesting this could be the start of a broader market correction.
+
+---
+Demo file: Shows keyword alert triggering ("crash", "Fed", "volatility")
