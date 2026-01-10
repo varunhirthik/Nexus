@@ -15,10 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY src/ ./src/
-COPY data/ ./data/
 COPY .env.example ./.env.example
 
-# Create necessary directories
+# Create necessary directories (data/ is mounted as volume, not copied)
 RUN mkdir -p data/output data/breaking_news
 
 # Expose Pathway port
