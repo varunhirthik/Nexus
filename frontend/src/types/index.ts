@@ -9,6 +9,7 @@ export interface NewsArticle {
   published: string;
   source: string;
   timestamp: number;
+  sentiment_score?: number; // -1 to 1
 }
 
 export interface QueryRequest {
