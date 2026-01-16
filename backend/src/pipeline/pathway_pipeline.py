@@ -61,23 +61,23 @@ class LiveNewsAnalystPipeline:
         """
         logger.info("Creating ingestion sources...")
         
-        # RSS Connector
-        rss_connector = RSSConnector(
-            url_list=settings.rss_feed_list,
-            refresh_interval=settings.rss_poll_interval
-        )
+        # RSS Connector - TEMPORARILY DISABLED due to streaming conflicts
+        # rss_connector = RSSConnector(
+        #     url_list=settings.rss_feed_list,
+        #     refresh_interval=settings.rss_poll_interval
+        # )
         
-        rss_table = pw.io.python.read(
-            rss_connector,
-            schema=NewsSchema,
-            autocommit_duration_ms=settings.autocommit_duration_ms
-        )
+        # rss_table = pw.io.python.read(
+        #     rss_connector,
+        #     schema=NewsSchema,
+        #     autocommit_duration_ms=settings.autocommit_duration_ms
+        # )
         
         # FileWatcher Connector
         file_connector = FileWatcherConnector(
             watch_directory=settings.breaking_news_dir,
             poll_interval=1.0,  # Fast polling for demos
-            auto_cleanup=True
+            auto_cleanup=False  # Disabled to prevent Pathway streaming conflicts
         )
         
         file_table = pw.io.python.read(
@@ -86,9 +86,8 @@ class LiveNewsAnalystPipeline:
             autocommit_duration_ms=500  # Even faster for file drops
         )
         
-        # Merge both sources - promise they are disjoint (different sources)
-        rss_table_promised = rss_table.promise_universes_are_disjoint(file_table)
-        combined_table = pw.Table.concat(rss_table_promised, file_table)
+        # Use only file table for now
+        combined_table = file_table
         
         logger.info("✓ Ingestion sources created")
         return combined_table
