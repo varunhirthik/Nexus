@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { NewsArticle } from '../types';
 import { formatDistanceToNow } from 'date-fns';
-import { ExternalLink, Clock } from 'lucide-react';
+import { ExternalLink, Clock, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 interface NewsTickerProps {
   articles: NewsArticle[];
@@ -16,15 +16,15 @@ const NewsTicker: React.FC<NewsTickerProps> = ({ articles }) => {
     setDisplayArticles(sorted.slice(0, 20)); // Show latest 20
   }, [articles]);
 
-  const getSourceColor = (source: string): string => {
-    const colors: Record<string, string> = {
-      'BBC': 'bg-red-100 text-red-800',
-      'Reuters': 'bg-blue-100 text-blue-800',
-      'TechCrunch': 'bg-green-100 text-green-800',
-      'HackerNews': 'bg-orange-100 text-orange-800',
-      'FileWatcher': 'bg-purple-100 text-purple-800',
+  const getSourceClass = (source: string): string => {
+    const classes: Record<string, string> = {
+      'BBC': 'bbc',
+      'Reuters': 'reuters',
+      'TechCrunch': 'techcrunch',
+      'HackerNews': 'hackernews',
+      'FileWatcher': 'filewatcher',
     };
-    return colors[source] || 'bg-gray-100 text-gray-800';
+    return classes[source] || 'default';
   };
 
   const formatTimestamp = (timestamp: number): string => {
@@ -35,49 +35,73 @@ const NewsTicker: React.FC<NewsTickerProps> = ({ articles }) => {
     }
   };
 
+  const getSentimentInfo = (score?: number) => {
+    if (score === undefined || score === null) {
+      return { label: 'Neutral', class: 'neutral', icon: <Minus className="w-3 h-3" /> };
+    }
+    if (score > 0.1) {
+      return { label: `+${score.toFixed(2)}`, class: 'positive', icon: <TrendingUp className="w-3 h-3" /> };
+    }
+    if (score < -0.1) {
+      return { label: score.toFixed(2), class: 'negative', icon: <TrendingDown className="w-3 h-3" /> };
+    }
+    return { label: score.toFixed(2), class: 'neutral', icon: <Minus className="w-3 h-3" /> };
+  };
+
   return (
-    <div className="space-y-3">
+    <div className="news-list" style={{ padding: '1rem' }}>
       {displayArticles.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
-          <Clock className="w-12 h-12 mx-auto mb-4 animate-pulse" />
-          <p>Waiting for live news updates...</p>
-          <p className="text-sm mt-2">The system is monitoring RSS feeds in real-time</p>
+        <div className="empty-state">
+          <Clock className="empty-state-icon" />
+          <p className="empty-state-title">Waiting for live news updates...</p>
+          <p className="empty-state-text">The system is monitoring news sources in real-time</p>
         </div>
       ) : (
-        displayArticles.map((article) => (
-          <div
-            key={article.id}
-            className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-white"
-          >
-            <div className="flex items-start justify-between mb-2">
-              <span className={`text-xs px-2 py-1 rounded-full font-semibold ${getSourceColor(article.source)}`}>
-                {article.source}
-              </span>
-              <span className="text-xs text-gray-500 flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                {formatTimestamp(article.timestamp)}
-              </span>
-            </div>
-            
-            <h3 className="font-semibold text-gray-900 mb-2 text-lg">
-              {article.title}
-            </h3>
-            
-            <p className="text-gray-600 text-sm mb-3 line-clamp-2">
-              {article.summary}
-            </p>
-            
-            <a
-              href={article.link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1 font-medium"
+        displayArticles.map((article, index) => {
+          const sentiment = getSentimentInfo(article.sentiment_score);
+          return (
+            <div
+              key={article.id}
+              className="news-article"
+              style={{ animationDelay: `${index * 0.05}s` }}
             >
-              Read full article
-              <ExternalLink className="w-3 h-3" />
-            </a>
-          </div>
-        ))
+              <div className="news-article-header">
+                <span className={`news-source ${getSourceClass(article.source)}`}>
+                  {article.source}
+                </span>
+                <span className="news-time">
+                  <Clock />
+                  {formatTimestamp(article.timestamp)}
+                </span>
+              </div>
+              
+              <h3 className="news-title">
+                {article.title}
+              </h3>
+              
+              <p className="news-summary">
+                {article.summary}
+              </p>
+              
+              <div className="news-footer">
+                <a
+                  href={article.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="news-link"
+                >
+                  Read full article
+                  <ExternalLink />
+                </a>
+                
+                <span className={`sentiment-badge ${sentiment.class}`}>
+                  {sentiment.icon}
+                  {sentiment.label}
+                </span>
+              </div>
+            </div>
+          );
+        })
       )}
     </div>
   );
