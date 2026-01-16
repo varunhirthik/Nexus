@@ -143,8 +143,37 @@ async def health_check():
 
 @app.get("/news/latest")
 async def get_latest_news(limit: int = 20):
-    """Get latest news articles."""
-    return state.articles[:limit]
+    """Get latest news articles from Pathway output files."""
+    import os
+    import json
+    
+    headlines_file = "data/output/headlines.jsonl"
+    articles = []
+    
+    try:
+        if os.path.exists(headlines_file):
+            with open(headlines_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            article = json.loads(line)
+                            articles.append(article)
+                        except json.JSONDecodeError:
+                            continue
+            
+            # Sort by timestamp (most recent first) and limit
+            articles.sort(key=lambda x: x.get('published', ''), reverse=True)
+            articles = articles[:limit]
+            
+            # Update state for other endpoints
+            state.articles = articles
+            state.stats["total_articles"] = len(articles)
+            state.stats["last_update"] = int(datetime.now().timestamp())
+    except Exception as e:
+        logger.error(f"Error reading headlines: {e}")
+    
+    return articles
 
 
 @app.get("/stats")
