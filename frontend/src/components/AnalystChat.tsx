@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { QueryResponse, RetrievedContext } from '../types';
 import APIService from '../services/api';
-import { Send, Loader2, ExternalLink, Clock } from 'lucide-react';
+import { Send, Loader2, ExternalLink, Clock, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -15,7 +15,7 @@ const AnalystChat: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: 'Hello! I\'m your Live News Analyst powered by real-time data. Ask me anything about recent news events.',
+      content: 'Hello! I\'m your AI News Analyst powered by real-time data from Pathway. Ask me anything about recent news events, market trends, or current headlines.',
       timestamp: Date.now(),
     },
   ]);
@@ -70,59 +70,109 @@ const AnalystChat: React.FC = () => {
     }
   };
 
+  const suggestedQuestions = [
+    "What's happening with Tesla?",
+    "Latest tech news",
+    "Bitcoin price updates",
+    "Market crash news"
+  ];
+
   return (
-    <div className="flex flex-col h-full">
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="chat-messages">
         {messages.map((message, index) => (
           <div
             key={index}
-            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            className={`chat-message ${message.role}`}
           >
-            <div
-              className={`max-w-3xl rounded-lg p-4 ${
-                message.role === 'user'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-900'
-              }`}
-            >
-              <div className="whitespace-pre-wrap">{message.content}</div>
+            <div className="chat-bubble">
+              {message.role === 'assistant' && (
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.5rem', 
+                  marginBottom: '0.75rem',
+                  paddingBottom: '0.75rem',
+                  borderBottom: '1px solid var(--border-color)'
+                }}>
+                  <Sparkles style={{ width: '16px', height: '16px', color: 'var(--accent-primary)' }} />
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent-primary)' }}>
+                    AI Analyst
+                  </span>
+                </div>
+              )}
+              
+              <div className="chat-content">{message.content}</div>
               
               {/* Show latency and context for assistant messages */}
               {message.role === 'assistant' && message.latency && (
-                <div className="mt-2 text-xs opacity-75 flex items-center gap-2">
-                  <Clock className="w-3 h-3" />
+                <div className="chat-meta">
+                  <Clock style={{ width: '12px', height: '12px' }} />
                   <span>Response time: {message.latency.toFixed(0)}ms</span>
                 </div>
               )}
 
               {message.role === 'assistant' && message.context && message.context.length > 0 && (
-                <div className="mt-3">
+                <div style={{ marginTop: '0.75rem' }}>
                   <button
                     onClick={() => setShowContext(showContext === index ? null : index)}
-                    className="text-xs underline opacity-75 hover:opacity-100"
+                    className="chat-sources-toggle"
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '0.375rem',
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      cursor: 'pointer',
+                      color: 'var(--accent-primary)'
+                    }}
                   >
+                    {showContext === index ? <ChevronUp style={{ width: '14px', height: '14px' }} /> : <ChevronDown style={{ width: '14px', height: '14px' }} />}
                     {showContext === index ? 'Hide' : 'Show'} {message.context.length} source(s)
                   </button>
                   
                   {showContext === index && (
-                    <div className="mt-2 space-y-2">
+                    <div className="chat-sources">
                       {message.context.map((ctx, ctxIndex) => (
                         <div
                           key={ctxIndex}
-                          className="bg-white bg-opacity-50 rounded p-2 text-xs"
+                          className="chat-source-item"
+                          style={{ 
+                            background: 'var(--bg-primary)',
+                            padding: '0.75rem',
+                            borderRadius: 'var(--radius-md)',
+                            marginBottom: ctxIndex < message.context!.length - 1 ? '0.5rem' : 0
+                          }}
                         >
-                          <p className="text-gray-700 mb-1">{ctx.text.substring(0, 150)}...</p>
-                          <div className="flex items-center justify-between text-gray-600">
+                          <p style={{ 
+                            color: 'var(--text-secondary)', 
+                            marginBottom: '0.5rem',
+                            lineHeight: 1.5
+                          }}>
+                            {ctx.text.substring(0, 200)}...
+                          </p>
+                          <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'space-between',
+                            color: 'var(--text-tertiary)'
+                          }}>
                             <span>{ctx.source}</span>
                             <a
                               href={ctx.link}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="flex items-center gap-1 hover:underline"
+                              style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '0.25rem',
+                                color: 'var(--accent-primary)'
+                              }}
                             >
-                              <ExternalLink className="w-3 h-3" />
-                              Link
+                              <ExternalLink style={{ width: '12px', height: '12px' }} />
+                              Open
                             </a>
                           </div>
                         </div>
@@ -136,10 +186,10 @@ const AnalystChat: React.FC = () => {
         ))}
 
         {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-gray-100 rounded-lg p-4 flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-sm text-gray-600">Analyzing news...</span>
+          <div className="chat-message assistant">
+            <div className="chat-loading">
+              <Loader2 style={{ width: '16px', height: '16px' }} />
+              <span>Analyzing news data...</span>
             </div>
           </div>
         )}
@@ -147,28 +197,73 @@ const AnalystChat: React.FC = () => {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Suggested Questions (only show when few messages) */}
+      {messages.length <= 2 && !isLoading && (
+        <div style={{ 
+          padding: '1rem 1.5rem',
+          borderTop: '1px solid var(--border-color)',
+          background: 'var(--bg-tertiary)'
+        }}>
+          <p style={{ 
+            fontSize: '0.75rem', 
+            color: 'var(--text-tertiary)', 
+            marginBottom: '0.75rem' 
+          }}>
+            Try asking:
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+            {suggestedQuestions.map((q, i) => (
+              <button
+                key={i}
+                onClick={() => setInput(q)}
+                style={{
+                  padding: '0.5rem 0.875rem',
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: 'var(--radius-full)',
+                  fontSize: '0.8125rem',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'all var(--transition-fast)'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                  e.currentTarget.style.color = 'var(--accent-primary)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border-color)';
+                  e.currentTarget.style.color = 'var(--text-secondary)';
+                }}
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Input Area */}
-      <div className="border-t border-gray-200 p-4 bg-white">
-        <form onSubmit={handleSubmit} className="flex gap-2">
+      <div className="chat-input-area">
+        <form onSubmit={handleSubmit} className="chat-form">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask about recent news events..."
-            className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="chat-input"
             disabled={isLoading}
           />
           <button
             type="submit"
             disabled={isLoading || !input.trim()}
-            className="bg-blue-600 text-white rounded-lg px-6 py-2 flex items-center gap-2 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            className="chat-submit"
           >
-            <Send className="w-4 h-4" />
+            <Send style={{ width: '16px', height: '16px' }} />
             Send
           </button>
         </form>
-        <p className="text-xs text-gray-500 mt-2">
-          💡 Try: "What's happening with Tesla?" or "Latest tech news"
+        <p className="chat-hint">
+          💡 Powered by Pathway's real-time RAG architecture with <span>Gemini AI</span>
         </p>
       </div>
     </div>
