@@ -28,7 +28,7 @@ class GeminiLLM:
     def __init__(
         self,
         api_key: str,
-        model: str = "gemini-1.5-flash",
+        model: str = "models/gemini-2.5-flash",
         temperature: float = 0.3,
         max_retries: int = 3
     ):
@@ -37,7 +37,7 @@ class GeminiLLM:
         
         Args:
             api_key: Google AI Studio API key
-            model: Model name (gemini-1.5-flash or gemini-1.5-pro)
+            model: Full model path (e.g., models/gemini-2.5-flash)
             temperature: Sampling temperature (0.0 = deterministic, 1.0 = creative)
             max_retries: Maximum retry attempts on failure
         """
@@ -54,6 +54,16 @@ class GeminiLLM:
         
         # Configure API
         genai.configure(api_key=api_key)
+        
+        # List available models for debugging
+        try:
+            available_models = []
+            for m in genai.list_models():
+                if hasattr(m, 'supported_generation_methods') and 'generateContent' in m.supported_generation_methods:
+                    available_models.append(m.name)
+            logger.info(f"Available models for generateContent: {available_models}")
+        except Exception as e:
+            logger.warning(f"Could not list models: {e}")
         
         # Initialize model
         self.model = genai.GenerativeModel(
@@ -110,6 +120,7 @@ class GeminiLLM:
                 logger.error(f"Gemini error (attempt {attempt + 1}/{self.max_retries}): {e}")
                 
                 if attempt == self.max_retries - 1:
+                    logger.error(f"Final error details: {type(e).__name__}: {str(e)}")
                     raise
                 
                 time.sleep(2 ** attempt)  # Exponential backoff
