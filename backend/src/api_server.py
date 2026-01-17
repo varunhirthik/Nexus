@@ -233,37 +233,67 @@ async def trigger_news_fetch():
 @app.post("/query", response_model=QueryResponse)
 async def query_analyst(request: QueryRequest):
     """
-    Query the RAG system.
+    Query the RAG system with AI-powered news analysis.
     
-    This endpoint will be connected to the Pathway KNN index
-    for real-time retrieval and LLM generation.
+    This endpoint:
+    1. Searches for relevant articles
+    2. Builds context for Gemini
+    3. Generates conversational AI response
+    4. Falls back to general knowledge if no articles match
     """
     start_time = datetime.now()
     
     try:
-        # TODO: Replace with actual Pathway KNN retrieval + LLM call
-        # For now, return a mock response
+        from llm.rag_query import get_rag_service
         
-        # Simulate processing
-        await asyncio.sleep(0.1)
+        rag_service = get_rag_service()
         
-        answer = f"I'm analyzing the latest news for your query: '{request.query}'. The system is currently indexing {len(state.articles)} articles."
+        if not rag_service:
+            # RAG service not initialized - return helpful message
+            latency_ms = (datetime.now() - start_time).total_seconds() * 1000
+            return QueryResponse(
+                query=request.query,
+                answer="I'm still warming up! The AI service is initializing. Please try again in a few seconds.",
+                context=[],
+                latency_ms=latency_ms,
+                timestamp=int(datetime.now().timestamp())
+            )
         
-        context = [
-            {
-                "text": article.get("summary", "")[:200],
-                "link": article.get("link", ""),
-                "source": article.get("source", ""),
-                "timestamp": article.get("timestamp", 0),
-            }
-            for article in state.articles[:request.top_k]
-        ]
+        # Get articles from state (populated by /news/latest)
+        # Also try to load fresh articles if state is empty
+        articles = state.articles
+        
+        if not articles:
+            # Try to load from headlines file
+            import os
+            import json as json_module
+            headlines_file = "data/output/headlines.jsonl"
+            if os.path.exists(headlines_file):
+                with open(headlines_file, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            try:
+                                article = json_module.loads(line)
+                                articles.append(article)
+                            except:
+                                continue
+                state.articles = articles
+        
+        # Query the RAG service
+        result = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: rag_service.query(request.query, articles)
+        )
+        
+        # Format context for response
+        context = result.get("context", [])
         
         latency_ms = (datetime.now() - start_time).total_seconds() * 1000
         
         return QueryResponse(
             query=request.query,
-            answer=answer,
+            answer=result["answer"],
             context=context,
             latency_ms=latency_ms,
             timestamp=int(datetime.now().timestamp())
@@ -271,7 +301,15 @@ async def query_analyst(request: QueryRequest):
     
     except Exception as e:
         logger.error(f"Query error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Return a user-friendly error
+        latency_ms = (datetime.now() - start_time).total_seconds() * 1000
+        return QueryResponse(
+            query=request.query,
+            answer=f"I encountered an issue while analyzing that. Please try rephrasing your question or try again in a moment.",
+            context=[],
+            latency_ms=latency_ms,
+            timestamp=int(datetime.now().timestamp())
+        )
 
 
 # WebSocket endpoint
