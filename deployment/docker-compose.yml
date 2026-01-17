@@ -15,6 +15,13 @@ services:
       - PATHWAY_PORT=8000
       - RSS_POLL_INTERVAL=${RSS_POLL_INTERVAL:-60}
       - AUTOCOMMIT_DURATION_MS=${AUTOCOMMIT_DURATION_MS:-1000}
+      # News API Configuration
+      - NEWSAPI_KEY=${NEWSAPI_KEY}
+      - GNEWS_KEY=${GNEWS_KEY}
+      - NEWS_POLL_INTERVAL=${NEWS_POLL_INTERVAL:-600}
+      - NEWS_CATEGORIES=${NEWS_CATEGORIES:-general,business,technology,science,health,entertainment}
+      - NEWS_KEYWORDS=${NEWS_KEYWORDS:-Tesla,Bitcoin,AI,Fed,inflation,tech,startup}
+      - NEWS_ENABLED=${NEWS_ENABLED:-true}
     volumes:
       - ../data:/app/data
       - ../backend/src:/app/src
