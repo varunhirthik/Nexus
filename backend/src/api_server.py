@@ -182,6 +182,54 @@ async def get_stats():
     return state.stats
 
 
+@app.get("/news/status")
+async def get_news_api_status():
+    """Get News API scheduler status."""
+    try:
+        from connectors.news_scheduler import get_scheduler
+        scheduler = get_scheduler()
+        
+        if scheduler:
+            return scheduler.get_status()
+        else:
+            return {
+                "running": False,
+                "message": "News scheduler not initialized",
+                "reason": "API keys may not be configured"
+            }
+    except Exception as e:
+        logger.error(f"Error getting news status: {e}")
+        return {
+            "running": False,
+            "error": str(e)
+        }
+
+
+@app.post("/news/fetch")
+async def trigger_news_fetch():
+    """Manually trigger a news fetch from APIs."""
+    try:
+        from connectors.news_scheduler import get_scheduler
+        scheduler = get_scheduler()
+        
+        if scheduler and scheduler.is_running:
+            stats = scheduler.fetch_now()
+            return {
+                "success": True,
+                "message": "Fetch triggered successfully",
+                "stats": stats
+            }
+        else:
+            return {
+                "success": False,
+                "message": "News scheduler is not running",
+                "hint": "Ensure NEWSAPI_KEY or GNEWS_KEY is configured in .env"
+            }
+    except Exception as e:
+        logger.error(f"Error triggering fetch: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/query", response_model=QueryResponse)
 async def query_analyst(request: QueryRequest):
     """
