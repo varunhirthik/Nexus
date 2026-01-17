@@ -1,7 +1,7 @@
 """Configuration management using pydantic-settings."""
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import List
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
@@ -20,7 +20,15 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.3
     max_context_chunks: int = 5
     
-    # RSS Feed Configuration
+    # News API Configuration
+    newsapi_key: Optional[str] = None
+    gnews_key: Optional[str] = None
+    news_poll_interval: int = 600  # 10 minutes
+    news_categories: str = "general,business,technology,science,health,entertainment"
+    news_keywords: str = "Tesla,Bitcoin,cryptocurrency,AI,artificial intelligence,stock market,Fed,inflation,tech,startup,merger,acquisition,IPO,earnings"
+    news_enabled: bool = True  # Enable/disable news API fetching
+    
+    # RSS Feed Configuration (legacy, kept for fallback)
     rss_poll_interval: int = 60  # seconds
     rss_feeds: str = (
         "http://feeds.bbci.co.uk/news/rss.xml,"
@@ -53,6 +61,21 @@ class Settings(BaseSettings):
     def alert_keyword_list(self) -> List[str]:
         """Parse alert keywords from comma-separated string."""
         return [kw.strip() for kw in self.alert_keywords.split(",") if kw.strip()]
+    
+    @property
+    def news_keyword_list(self) -> List[str]:
+        """Parse news keywords from comma-separated string."""
+        return [kw.strip() for kw in self.news_keywords.split(",") if kw.strip()]
+    
+    @property
+    def news_category_list(self) -> List[str]:
+        """Parse news categories from comma-separated string."""
+        return [cat.strip() for cat in self.news_categories.split(",") if cat.strip()]
+    
+    @property
+    def has_news_api_keys(self) -> bool:
+        """Check if news API keys are configured."""
+        return bool(self.newsapi_key) or bool(self.gnews_key)
 
 
 # Global settings instance
