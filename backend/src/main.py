@@ -2,7 +2,7 @@
 Main entry point for the Live News Analyst backend.
 
 This script initializes and runs the Pathway pipeline with all
-real-time components.
+real-time components including the News API scheduler.
 """
 
 import os
@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from config import settings
 from pipeline.pathway_pipeline import LiveNewsAnalystPipeline
+from connectors.news_scheduler import init_scheduler
 
 # Configure logging
 logging.basicConfig(
@@ -34,7 +35,7 @@ def check_environment():
     """Validate environment configuration."""
     logger.info("Checking environment configuration...")
     
-    # Check for API key
+    # Check for Gemini API key
     if not settings.gemini_api_key or settings.gemini_api_key == "your_gemini_api_key_here":
         logger.error("="*60)
         logger.error("GEMINI_API_KEY not configured!")
@@ -43,13 +44,27 @@ def check_environment():
         logger.error("="*60)
         sys.exit(1)
     
+    # Check News API keys
+    if settings.news_enabled:
+        if not settings.newsapi_key and not settings.gnews_key:
+            logger.warning("="*60)
+            logger.warning("NEWS API KEYS not configured!")
+            logger.warning("Real-time news fetching will be disabled.")
+            logger.warning("Set NEWSAPI_KEY and/or GNEWS_KEY in .env")
+            logger.warning("="*60)
+        else:
+            if settings.newsapi_key:
+                logger.info(f"✓ NewsAPI key configured")
+            if settings.gnews_key:
+                logger.info(f"✓ GNews key configured")
+            logger.info(f"✓ News poll interval: {settings.news_poll_interval}s")
+    
     # Check RSS feeds
     if not settings.rss_feed_list:
         logger.warning("No RSS feeds configured. Using defaults.")
     
-    logger.info(f"✓ API Key configured")
+    logger.info(f"✓ Gemini API Key configured")
     logger.info(f"✓ {len(settings.rss_feed_list)} RSS feeds configured")
-    logger.info(f"✓ Poll interval: {settings.rss_poll_interval}s")
     logger.info(f"✓ FileWatcher directory: {settings.breaking_news_dir}")
     
     # Ensure directories exist
@@ -61,19 +76,20 @@ def check_environment():
 
 def print_startup_banner():
     """Print ASCII art banner."""
+    news_api_status = "Enabled" if (settings.news_enabled and settings.has_news_api_keys) else "Disabled"
     banner = """
     ╔═══════════════════════════════════════════════════════════╗
     ║                                                           ║
-    ║          LIVE NEWS ANALYST - PATHWAY EDITION             ║
+    ║             NEXUS - LIVE NEWS ANALYST                    ║
     ║                                                           ║
-    ║  Real-Time RAG System for DataQuest Hackathon 2025      ║
+    ║  Real-Time RAG System with News API Integration          ║
     ║                                                           ║
     ╚═══════════════════════════════════════════════════════════╝
     
-    🚀 Powered by: Pathway | Google Gemini | React
+    🚀 Powered by: Pathway | Google Gemini | React | NewsAPI
     
     📊 Features:
-       ✓ Real-time RSS ingestion (60s polling)
+       ✓ Real-time News API fetching ({poll}s polling)
        ✓ Incremental vector indexing
        ✓ Sentiment analysis ticker
        ✓ Keyword alert system
@@ -82,19 +98,22 @@ def print_startup_banner():
     ⚙️  Configuration:
        • Backend Port: {port}
        • LLM Model: {model}
-       • RSS Feeds: {feed_count}
+       • News API: {news_status}
        • Alert Keywords: {keyword_count}
     
-    📡 Endpoints (when REST API is ready):
-       • GET  /headlines  - Latest news
-       • GET  /sentiment  - Sentiment data
-       • POST /query      - RAG queries
-       • WS   /ws         - Live updates
+    📡 Endpoints:
+       • GET  /news/latest  - Latest news
+       • GET  /sentiment    - Sentiment data
+       • POST /query        - RAG queries
+       • GET  /news/status  - News API status
+       • POST /news/fetch   - Manual fetch trigger
+       • WS   /ws           - Live updates
     
     """.format(
         port=settings.pathway_port,
         model=settings.llm_model,
-        feed_count=len(settings.rss_feed_list),
+        poll=settings.news_poll_interval,
+        news_status=news_api_status,
         keyword_count=len(settings.alert_keyword_list)
     )
     
@@ -103,6 +122,8 @@ def print_startup_banner():
 
 def main():
     """Main entry point."""
+    news_scheduler = None
+    
     try:
         # Load environment variables
         load_dotenv()
@@ -119,8 +140,27 @@ def main():
         pipeline = LiveNewsAnalystPipeline()
         
         logger.info("="*60)
-        logger.info("🎬 STARTING LIVE NEWS ANALYST")
+        logger.info("🎬 STARTING NEXUS - LIVE NEWS ANALYST")
         logger.info("="*60)
+        logger.info("")
+        
+        # Start News API Scheduler if configured
+        if settings.news_enabled and settings.has_news_api_keys:
+            logger.info("📡 Starting News API Scheduler...")
+            news_scheduler = init_scheduler(
+                newsapi_key=settings.newsapi_key or "",
+                gnews_key=settings.gnews_key or "",
+                poll_interval=settings.news_poll_interval,
+                output_dir=settings.breaking_news_dir,
+                keywords=settings.news_keyword_list
+            )
+            news_scheduler.start()
+            logger.info(f"   → Poll interval: {settings.news_poll_interval}s")
+            logger.info(f"   → Keywords: {', '.join(settings.news_keyword_list[:5])}...")
+        else:
+            logger.info("📡 News API Scheduler: DISABLED (no API keys)")
+            logger.info("   → Using FileWatcher for demo data only")
+        
         logger.info("")
         logger.info("💡 TIP: Drop .txt files into data/breaking_news/ for instant ingestion")
         logger.info("💡 TIP: Watch data/output/headlines.jsonl for real-time updates")
@@ -156,6 +196,8 @@ def main():
         logger.info("")
         logger.info("="*60)
         logger.info("🛑 Shutting down gracefully...")
+        if news_scheduler:
+            news_scheduler.stop()
         logger.info("="*60)
         sys.exit(0)
     
@@ -165,6 +207,8 @@ def main():
         logger.error("="*60)
         import traceback
         traceback.print_exc()
+        if news_scheduler:
+            news_scheduler.stop()
         sys.exit(1)
 
 
