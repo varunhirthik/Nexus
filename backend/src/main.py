@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from config import settings
 from pipeline.pathway_pipeline import LiveNewsAnalystPipeline
 from connectors.news_scheduler import init_scheduler
+from llm.rag_query import init_rag_service
 
 # Configure logging
 logging.basicConfig(
@@ -135,6 +136,15 @@ def main():
         check_environment()
         
         logger.info("Initializing pipeline...")
+        
+        # Initialize RAG Query Service
+        logger.info("🤖 Initializing RAG Query Service (Gemini AI)...")
+        rag_service = init_rag_service(
+            api_key=settings.gemini_api_key,
+            model=settings.llm_model,
+            temperature=0.7
+        )
+        logger.info("   → RAG Service ready for AI queries")
         
         # Create and run pipeline
         pipeline = LiveNewsAnalystPipeline()
