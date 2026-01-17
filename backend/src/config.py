@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     
     # Gemini API Configuration
     gemini_api_key: str
-    llm_model: str = "gemini-1.5-flash"
+    llm_model: str = "models/gemini-2.5-flash"  # Full model path
     llm_temperature: float = 0.3
     max_context_chunks: int = 5
     
