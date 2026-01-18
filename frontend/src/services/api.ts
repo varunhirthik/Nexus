@@ -53,6 +53,19 @@ class APIService {
     }
   }
 
+  async getSentimentData(): Promise<{ current: { sentiment_score: number }; history: Array<{ timestamp: string; sentiment_score: number; title: string; source: string }> }> {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/sentiment`);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch sentiment data:', error);
+      return {
+        current: { sentiment_score: 0 },
+        history: []
+      };
+    }
+  }
+
   // WebSocket Methods
   connectWebSocket(
     onMessage: (message: WSMessage) => void,
