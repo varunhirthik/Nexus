@@ -1,0 +1,32 @@
+steps:
+  # Build the backend Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-south1-docker.pkg.dev/$PROJECT_ID/nexus-images/nexus-backend:latest'
+      - '-t'
+      - 'asia-south1-docker.pkg.dev/$PROJECT_ID/nexus-images/nexus-backend:$SHORT_SHA'
+      - '-f'
+      - 'cloudrun/backend.Dockerfile'
+      - '.'
+    dir: '..'
+
+  # Push the backend image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'asia-south1-docker.pkg.dev/$PROJECT_ID/nexus-images/nexus-backend:latest'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'asia-south1-docker.pkg.dev/$PROJECT_ID/nexus-images/nexus-backend:$SHORT_SHA'
+
+images:
+  - 'asia-south1-docker.pkg.dev/$PROJECT_ID/nexus-images/nexus-backend:latest'
+  - 'asia-south1-docker.pkg.dev/$PROJECT_ID/nexus-images/nexus-backend:$SHORT_SHA'
+
+options:
+  machineType: 'N1_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY

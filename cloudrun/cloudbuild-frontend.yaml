@@ -1,0 +1,34 @@
+steps:
+  # Build the frontend Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-south1-docker.pkg.dev/$PROJECT_ID/nexus-images/nexus-frontend:latest'
+      - '-t'
+      - 'asia-south1-docker.pkg.dev/$PROJECT_ID/nexus-images/nexus-frontend:$SHORT_SHA'
+      - '-f'
+      - 'cloudrun/frontend.Dockerfile'
+      - '--build-arg'
+      - 'VITE_API_URL=https://nexus-backend-99420505209.asia-south1.run.app'
+      - '.'
+    dir: '..'
+
+  # Push the frontend image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'asia-south1-docker.pkg.dev/$PROJECT_ID/nexus-images/nexus-frontend:latest'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'asia-south1-docker.pkg.dev/$PROJECT_ID/nexus-images/nexus-frontend:$SHORT_SHA'
+
+images:
+  - 'asia-south1-docker.pkg.dev/$PROJECT_ID/nexus-images/nexus-frontend:latest'
+  - 'asia-south1-docker.pkg.dev/$PROJECT_ID/nexus-images/nexus-frontend:$SHORT_SHA'
+
+options:
+  machineType: 'N1_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
