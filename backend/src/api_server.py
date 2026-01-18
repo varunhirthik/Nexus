@@ -10,12 +10,16 @@ import json
 import logging
 from datetime import datetime
 from typing import Dict, List, Set
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import uvicorn
 
 logger = logging.getLogger(__name__)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 
 
 # Pydantic models for API
@@ -78,14 +82,30 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware
+# CORS middleware - must be added FIRST and handle all origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=["*"],
+    allow_credentials=False,  # Set to False when using allow_origins=["*"]
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
+
+
+# Global exception handler to ensure CORS headers are always present
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "error": "Internal server error"},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
 
 
 # Startup event to initialize services
@@ -145,9 +165,61 @@ async def startup_event():
     except Exception as e:
         logger.error(f"✗ Failed to start stats service: {e}")
     
+    # Start keyword alert monitoring in background
+    asyncio.create_task(monitor_keyword_alerts())
+    logger.info("✓ Keyword alert monitoring started!")
+    
     logger.info("="*60)
     logger.info("🎯 Nexus API Server ready!")
     logger.info("="*60)
+
+
+# Alert keywords to monitor
+ALERT_KEYWORDS = ["Tesla", "Bitcoin", "Fed", "inflation", "AI", "crash", "China", "market"]
+
+
+async def monitor_keyword_alerts():
+    """Background task to monitor articles for keyword alerts."""
+    last_check_count = 0
+    
+    while True:
+        try:
+            await asyncio.sleep(30)  # Check every 30 seconds
+            
+            if len(state.articles) > last_check_count:
+                # Check new articles for keywords
+                new_articles = state.articles[:len(state.articles) - last_check_count]
+                last_check_count = len(state.articles)
+                
+                for article in new_articles:
+                    title = article.get("title", "").lower()
+                    content = article.get("content", "").lower()
+                    text = f"{title} {content}"
+                    
+                    triggered_keywords = []
+                    for keyword in ALERT_KEYWORDS:
+                        if keyword.lower() in text:
+                            triggered_keywords.append(keyword)
+                    
+                    if triggered_keywords:
+                        alert = {
+                            "type": "keyword",
+                            "keywords": triggered_keywords,
+                            "article_title": article.get("title", "Unknown"),
+                            "source": article.get("source", "Unknown"),
+                            "timestamp": int(datetime.now().timestamp())
+                        }
+                        state.alerts.append(alert)
+                        
+                        # Broadcast alert via WebSocket
+                        await manager.broadcast({
+                            "type": "alert",
+                            "data": alert
+                        })
+                        logger.info(f"🚨 Alert triggered: {triggered_keywords} in '{article.get('title', '')[:50]}...'")
+        except Exception as e:
+            logger.error(f"Error in keyword monitoring: {e}")
+            await asyncio.sleep(60)  # Wait longer on error
 
 
 # WebSocket connection manager
@@ -311,6 +383,13 @@ async def get_latest_news(limit: int = 20):
 @app.get("/stats")
 async def get_stats():
     """Get system statistics from stats service."""
+    default_stats = {
+        "total_articles": len(state.articles),
+        "articles_last_hour": 0,
+        "active_sources": len(set(a.get("source", "unknown") for a in state.articles)),
+        "avg_latency_ms": 0,
+        "last_update": int(datetime.now().timestamp())
+    }
     try:
         from services.stats_service import get_stats_service
         stats_service = get_stats_service()
@@ -318,16 +397,19 @@ async def get_stats():
         if stats_service:
             return stats_service.get_stats()
         else:
-            # Fallback to basic stats
-            return state.stats
+            return default_stats
     except Exception as e:
         logger.error(f"Error getting stats: {e}")
-        return state.stats
+        return default_stats
 
 
 @app.get("/sentiment")
 async def get_sentiment():
     """Get current sentiment data."""
+    default_sentiment = {
+        "current": {"sentiment_score": 0.0, "timestamp": int(datetime.now().timestamp()), "sample_count": 0},
+        "history": []
+    }
     try:
         from services.stats_service import get_stats_service
         stats_service = get_stats_service()
@@ -338,13 +420,20 @@ async def get_sentiment():
                 "history": stats_service.get_sentiment_history(30)
             }
         else:
-            return {
-                "current": {"sentiment_score": 0, "timestamp": 0, "sample_count": 0},
-                "history": []
-            }
+            return default_sentiment
     except Exception as e:
         logger.error(f"Error getting sentiment: {e}")
-        return {"current": {"sentiment_score": 0}, "history": []}
+        return default_sentiment
+
+
+@app.get("/alerts")
+async def get_alerts():
+    """Get current keyword alerts."""
+    return {
+        "alerts": state.alerts[-20:] if state.alerts else [],
+        "keywords": ["Tesla", "Bitcoin", "Fed", "inflation", "AI", "crash"],
+        "last_update": int(datetime.now().timestamp())
+    }
 
 
 @app.get("/news/status")
