@@ -41,7 +41,7 @@ class LiveNewsAnalystPipeline:
     def __init__(self):
         """Initialize pipeline components."""
         self.llm = GeminiLLM(
-            api_key=settings.gemini_api_key,
+            api_key=settings.api_key,
             model=settings.llm_model,
             temperature=settings.llm_temperature
         )

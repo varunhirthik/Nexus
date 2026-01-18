@@ -37,27 +37,27 @@ def check_environment():
     """Validate environment configuration."""
     logger.info("Checking environment configuration...")
     
-    # Check for Gemini API key
-    if not settings.gemini_api_key or settings.gemini_api_key == "your_gemini_api_key_here":
+    # Check for Gemini API key (supports both GEMINI_API_KEY and GOOGLE_API_KEY)
+    if not settings.api_key or settings.api_key == "your_gemini_api_key_here":
         logger.error("="*60)
-        logger.error("GEMINI_API_KEY not configured!")
-        logger.error("Please set your API key in the .env file")
+        logger.error("GEMINI_API_KEY or GOOGLE_API_KEY not configured!")
+        logger.error("Please set your API key in the .env file or as an environment variable")
         logger.error("Get your key from: https://makersuite.google.com/app/apikey")
         logger.error("="*60)
         sys.exit(1)
     
-    # Check News API keys
+    # Check News API keys (supports both naming conventions)
     if settings.news_enabled:
-        if not settings.newsapi_key and not settings.gnews_key:
+        if not settings.effective_newsapi_key and not settings.effective_gnews_key:
             logger.warning("="*60)
             logger.warning("NEWS API KEYS not configured!")
             logger.warning("Real-time news fetching will be disabled.")
-            logger.warning("Set NEWSAPI_KEY and/or GNEWS_KEY in .env")
+            logger.warning("Set NEWSAPI_KEY/NEWS_API_KEY and/or GNEWS_KEY/GNEWS_API_KEY")
             logger.warning("="*60)
         else:
-            if settings.newsapi_key:
+            if settings.effective_newsapi_key:
                 logger.info(f"✓ NewsAPI key configured")
-            if settings.gnews_key:
+            if settings.effective_gnews_key:
                 logger.info(f"✓ GNews key configured")
             logger.info(f"✓ News poll interval: {settings.news_poll_interval}s")
     
@@ -141,7 +141,7 @@ def main():
         # Initialize RAG Query Service
         logger.info("🤖 Initializing RAG Query Service (Gemini AI)...")
         rag_service = init_rag_service(
-            api_key=settings.gemini_api_key,
+            api_key=settings.api_key,
             model=settings.llm_model,
             temperature=0.7
         )
@@ -169,8 +169,8 @@ def main():
         if settings.news_enabled and settings.has_news_api_keys:
             logger.info("📡 Starting News API Scheduler...")
             news_scheduler = init_scheduler(
-                newsapi_key=settings.newsapi_key or "",
-                gnews_key=settings.gnews_key or "",
+                newsapi_key=settings.effective_newsapi_key or "",
+                gnews_key=settings.effective_gnews_key or "",
                 poll_interval=settings.news_poll_interval,
                 output_dir=settings.breaking_news_dir,
                 keywords=settings.news_keyword_list

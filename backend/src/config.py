@@ -15,14 +15,23 @@ class Settings(BaseSettings):
     )
     
     # Gemini API Configuration
-    gemini_api_key: str
+    # Supports both GEMINI_API_KEY and GOOGLE_API_KEY for flexibility
+    gemini_api_key: Optional[str] = None
+    google_api_key: Optional[str] = None  # Cloud Run secret name
     llm_model: str = "models/gemini-2.5-flash"  # Full model path
     llm_temperature: float = 0.3
     max_context_chunks: int = 5
     
+    @property
+    def api_key(self) -> str:
+        """Get the API key (supports both naming conventions)."""
+        return self.gemini_api_key or self.google_api_key or ""
+    
     # News API Configuration
     newsapi_key: Optional[str] = None
+    news_api_key: Optional[str] = None  # Cloud Run secret name alternative
     gnews_key: Optional[str] = None
+    gnews_api_key: Optional[str] = None  # Cloud Run secret name alternative
     news_poll_interval: int = 600  # 10 minutes
     news_categories: str = "general,business,technology,science,health,entertainment"
     news_keywords: str = "Tesla,Bitcoin,cryptocurrency,AI,artificial intelligence,stock market,Fed,inflation,tech,startup,merger,acquisition,IPO,earnings"
@@ -75,7 +84,17 @@ class Settings(BaseSettings):
     @property
     def has_news_api_keys(self) -> bool:
         """Check if news API keys are configured."""
-        return bool(self.newsapi_key) or bool(self.gnews_key)
+        return bool(self.newsapi_key or self.news_api_key) or bool(self.gnews_key or self.gnews_api_key)
+    
+    @property
+    def effective_newsapi_key(self) -> Optional[str]:
+        """Get NewsAPI key (supports both naming conventions)."""
+        return self.newsapi_key or self.news_api_key
+    
+    @property
+    def effective_gnews_key(self) -> Optional[str]:
+        """Get GNews key (supports both naming conventions)."""
+        return self.gnews_key or self.gnews_api_key
 
 
 # Global settings instance

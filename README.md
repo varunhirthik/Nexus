@@ -404,7 +404,35 @@ npm install
 npm run dev
 ```
 
-### Option 3: Production Deployment
+### Option 3: Google Cloud Run (Production)
+
+Deploy to Google Cloud Run for a production-ready setup. See the detailed guide at `cloudrun/DEPLOYMENT.md`.
+
+**Quick Steps in Cloud Shell:**
+
+```bash
+# 1. Clone repo and set up project
+git clone https://github.com/varunhirthik/Nexus.git
+cd Nexus
+export GCP_PROJECT_ID="your-project-id"
+export GCP_REGION="asia-south1"
+
+# 2. Set up secrets (API keys)
+chmod +x cloudrun/setup-secrets.sh
+./cloudrun/setup-secrets.sh
+
+# 3. Deploy!
+chmod +x cloudrun/deploy.sh
+./cloudrun/deploy.sh
+```
+
+**What gets deployed:**
+- ✅ Backend on Cloud Run with Gemini AI integration
+- ✅ Frontend on Cloud Run with auto-scaling
+- ✅ API keys secured in Secret Manager
+- ✅ Automatic HTTPS with Google-managed certificates
+
+### Option 4: Manual Cloud Deployment
 
 For cloud deployment (AWS/GCP/Azure):
 
