@@ -208,11 +208,67 @@ async def get_latest_news(limit: int = 20):
     """Get latest news articles from Pathway output files."""
     import os
     import json
+    from pathlib import Path
+    from datetime import datetime as _dt
     
     headlines_file = "data/output/headlines.jsonl"
     articles = []
-    
+
+    def _read_breaking_texts(dir_path: str):
+        """Read individual .txt article files from breaking_news and return list of article dicts."""
+        items = []
+        try:
+            p = Path(dir_path)
+            if not p.exists():
+                return items
+
+            for fp in sorted(p.glob("*.txt"), reverse=True):
+                try:
+                    text = fp.read_text(encoding='utf-8')
+                except Exception:
+                    continue
+
+                # Basic parsing: look for Title:, Source:, Published: headers
+                title = ""
+                source = ""
+                published = ""
+                content = text
+
+                for line in text.splitlines():
+                    if line.startswith("Title:"):
+                        title = line.split("Title:", 1)[1].strip()
+                    elif line.startswith("Source:"):
+                        source = line.split("Source:", 1)[1].strip()
+                    elif line.startswith("Published:"):
+                        published = line.split("Published:", 1)[1].strip()
+
+                # Fallbacks
+                if not title:
+                    # take first non-empty line as title
+                    for ln in text.splitlines():
+                        if ln.strip():
+                            title = ln.strip()
+                            break
+
+                # Build article dict matching pipeline output where possible
+                items.append({
+                    "id": fp.stem,
+                    "title": title,
+                    "summary": title,
+                    "content": content,
+                    "link": "",
+                    "published": published or str(int(_dt.now().timestamp())),
+                    "source": source or "news_source",
+                    "timestamp": int(_dt.now().timestamp())
+                })
+
+        except Exception as e:
+            logger.error(f"Error reading breaking_news files: {e}")
+
+        return items
+
     try:
+        # 1) Try reading Pathway-generated headlines JSONL
         if os.path.exists(headlines_file):
             with open(headlines_file, 'r', encoding='utf-8') as f:
                 for line in f:
@@ -223,18 +279,32 @@ async def get_latest_news(limit: int = 20):
                             articles.append(article)
                         except json.JSONDecodeError:
                             continue
-            
-            # Sort by timestamp (most recent first) and limit
-            articles.sort(key=lambda x: x.get('published', ''), reverse=True)
-            articles = articles[:limit]
-            
-            # Update state for other endpoints
-            state.articles = articles
-            state.stats["total_articles"] = len(articles)
-            state.stats["last_update"] = int(datetime.now().timestamp())
+
+        # 2) If no articles found, fall back to reading breaking_news text files
+        if not articles:
+            articles = _read_breaking_texts("data/breaking_news")
+
+        # Normalize and sort by published/timestamp
+        def _ts_key(a):
+            # prefer timestamp int, then published string
+            try:
+                return int(a.get('timestamp') or 0)
+            except Exception:
+                try:
+                    return int(float(a.get('published', 0)))
+                except Exception:
+                    return 0
+
+        articles.sort(key=_ts_key, reverse=True)
+        articles = articles[:limit]
+
+        # Update state for other endpoints
+        state.articles = articles
+        state.stats["total_articles"] = len(articles)
+        state.stats["last_update"] = int(_dt.now().timestamp())
     except Exception as e:
         logger.error(f"Error reading headlines: {e}")
-    
+
     return articles
 
 
