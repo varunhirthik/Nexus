@@ -22,11 +22,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source code
 COPY backend/src/ ./src/
 
-# Create data directories
+# Create data directories (will be populated by news API at runtime)
 RUN mkdir -p data/output data/breaking_news
-
-# Copy demo data for initial content
-COPY data/breaking_news/ ./data/breaking_news/
 
 # Set working directory to src
 WORKDIR /app/src
