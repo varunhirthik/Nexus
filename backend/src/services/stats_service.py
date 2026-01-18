@@ -53,6 +53,7 @@ class StatsService:
         self,
         headlines_file: str = "data/output/headlines.jsonl",
         sentiment_file: str = "data/output/sentiment.jsonl",
+        data_dir: str = "data/breaking_news",
         poll_interval: float = 5.0,  # seconds
         sentiment_window_minutes: int = 30
     ):
@@ -62,11 +63,13 @@ class StatsService:
         Args:
             headlines_file: Path to headlines JSONL file
             sentiment_file: Path to sentiment JSONL file
+            data_dir: Path to breaking news text files directory
             poll_interval: How often to recalculate stats (seconds)
             sentiment_window_minutes: Window for sentiment aggregation
         """
         self.headlines_file = headlines_file
         self.sentiment_file = sentiment_file
+        self.data_dir = data_dir
         self.poll_interval = poll_interval
         self.sentiment_window_minutes = sentiment_window_minutes
         
@@ -142,36 +145,95 @@ class StatsService:
             logger.error(f"Error reading {filepath}: {e}")
         return entries
     
+    def _read_text_files(self, directory: str) -> List[Dict]:
+        """Read all text files from a directory and extract article info."""
+        articles = []
+        try:
+            if os.path.exists(directory) and os.path.isdir(directory):
+                for filename in os.listdir(directory):
+                    if filename.endswith('.txt'):
+                        filepath = os.path.join(directory, filename)
+                        try:
+                            # Extract timestamp from filename (format: hash_timestamp.txt)
+                            parts = filename.replace('.txt', '').split('_')
+                            file_timestamp = int(parts[-1]) if len(parts) > 1 else 0
+                            
+                            with open(filepath, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                            
+                            # Parse the text file format
+                            lines = content.strip().split('\n')
+                            article = {
+                                'title': '',
+                                'source': '',
+                                'timestamp': file_timestamp,
+                                'content': content
+                            }
+                            
+                            for line in lines:
+                                if line.startswith('Title:'):
+                                    article['title'] = line.replace('Title:', '').strip()
+                                elif line.startswith('Source:'):
+                                    article['source'] = line.replace('Source:', '').strip()
+                                elif line.startswith('Published:'):
+                                    article['published'] = line.replace('Published:', '').strip()
+                            
+                            articles.append(article)
+                        except Exception as e:
+                            logger.debug(f"Error reading {filename}: {e}")
+                            continue
+        except Exception as e:
+            logger.error(f"Error reading directory {directory}: {e}")
+        return articles
+    
     def _calculate_stats(self):
         """Calculate system statistics from data files."""
         try:
+            # Read from both JSONL files and text files directory
             articles = self._read_jsonl_file(self.headlines_file)
+            text_articles = self._read_text_files(self.data_dir)
+            
+            # Combine both sources
+            all_articles = articles + text_articles
             
             # Total articles
-            total_articles = len(articles)
+            total_articles = len(all_articles)
             
             # Articles in last hour
             one_hour_ago = datetime.now() - timedelta(hours=1)
+            one_hour_ago_ts = int(one_hour_ago.timestamp())
             articles_last_hour = 0
             active_sources: Set[str] = set()
             
-            for article in articles:
+            for article in all_articles:
                 # Check timestamp
                 published = article.get('published', '')
                 source = article.get('source', '')
+                timestamp = article.get('timestamp', 0)
                 
                 if source:
                     active_sources.add(source)
                 
-                # Parse published date
-                try:
-                    if 'T' in published:
-                        # ISO format: 2026-01-17T17:22:39.809703
-                        pub_dt = datetime.fromisoformat(published.replace('Z', '+00:00').split('+')[0])
-                        if pub_dt > one_hour_ago:
-                            articles_last_hour += 1
-                except (ValueError, TypeError):
-                    pass
+                # Check if article is from last hour
+                is_recent = False
+                
+                # Check by timestamp field
+                if timestamp and timestamp > one_hour_ago_ts:
+                    is_recent = True
+                
+                # Check by published date string
+                if not is_recent and published:
+                    try:
+                        if 'T' in str(published):
+                            # ISO format: 2026-01-17T17:22:39.809703
+                            pub_dt = datetime.fromisoformat(str(published).replace('Z', '+00:00').split('+')[0])
+                            if pub_dt > one_hour_ago:
+                                is_recent = True
+                    except (ValueError, TypeError):
+                        pass
+                
+                if is_recent:
+                    articles_last_hour += 1
             
             # Average latency
             avg_latency = self._latency_tracker.get_average()
@@ -196,43 +258,46 @@ class StatsService:
             logger.error(f"Error calculating stats: {e}")
     
     def _calculate_sentiment(self):
-        """Calculate aggregated sentiment from sentiment file."""
+        """Calculate aggregated sentiment from sentiment file and text files."""
         try:
+            from textblob import TextBlob
+        except ImportError:
+            logger.warning("TextBlob not installed, sentiment analysis disabled")
+            return
+            
+        try:
+            # Read from sentiment JSONL file
             sentiments = self._read_jsonl_file(self.sentiment_file)
+            
+            # Also analyze sentiment from text files
+            text_articles = self._read_text_files(self.data_dir)
+            
+            # Analyze sentiment for text articles
+            for article in text_articles:
+                content = article.get('content', '') or article.get('title', '')
+                if content:
+                    try:
+                        blob = TextBlob(content[:500])  # Limit to first 500 chars
+                        score = blob.sentiment.polarity  # -1 to 1
+                        
+                        sentiments.append({
+                            'timestamp': datetime.fromtimestamp(article.get('timestamp', time.time())).isoformat(),
+                            'sentiment_score': score,
+                            'title': article.get('title', ''),
+                            'source': article.get('source', '')
+                        })
+                    except Exception:
+                        pass
             
             if not sentiments:
                 return
             
-            # Check if we have new data
-            if len(sentiments) <= self._last_sentiment_count:
-                return
+            # Sort by timestamp
+            sentiments.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
             
-            # Get new sentiment entries
-            new_entries = sentiments[self._last_sentiment_count:]
-            self._last_sentiment_count = len(sentiments)
-            
-            # Filter to sentiment window
-            window_start = datetime.now() - timedelta(minutes=self.sentiment_window_minutes)
-            recent_sentiments: List[float] = []
-            
-            for entry in sentiments:
-                timestamp = entry.get('timestamp', '')
-                score = entry.get('sentiment_score', 0)
-                
-                try:
-                    if 'T' in str(timestamp):
-                        ts_dt = datetime.fromisoformat(str(timestamp).replace('Z', '+00:00').split('+')[0])
-                        if ts_dt > window_start:
-                            recent_sentiments.append(score)
-                except (ValueError, TypeError):
-                    recent_sentiments.append(score)
-            
-            # Calculate aggregate sentiment
-            if recent_sentiments:
-                self._current_sentiment = sum(recent_sentiments) / len(recent_sentiments)
-            
-            # Update history with new entries
-            for entry in new_entries:
+            # Update sentiment history with latest entries
+            self._sentiment_history = []
+            for entry in sentiments[-50:]:  # Keep last 50
                 sentiment_point = {
                     "timestamp": entry.get('timestamp', ''),
                     "sentiment_score": entry.get('sentiment_score', 0),
@@ -240,17 +305,21 @@ class StatsService:
                     "source": entry.get('source', '')
                 }
                 self._sentiment_history.append(sentiment_point)
-                
-                # Notify callbacks for each new sentiment
-                for callback in self._sentiment_callbacks:
-                    try:
-                        callback(sentiment_point)
-                    except Exception as e:
-                        logger.error(f"Sentiment callback error: {e}")
             
-            # Keep history bounded
-            if len(self._sentiment_history) > 100:
-                self._sentiment_history = self._sentiment_history[-100:]
+            # Calculate aggregate sentiment
+            if self._sentiment_history:
+                scores = [s.get('sentiment_score', 0) for s in self._sentiment_history]
+                self._current_sentiment = sum(scores) / len(scores)
+            
+            # Notify callbacks
+            for callback in self._sentiment_callbacks:
+                try:
+                    callback({
+                        'current': self._current_sentiment,
+                        'history': self._sentiment_history
+                    })
+                except Exception as e:
+                    logger.error(f"Sentiment callback error: {e}")
             
         except Exception as e:
             logger.error(f"Error calculating sentiment: {e}")
@@ -306,6 +375,7 @@ def get_stats_service() -> Optional[StatsService]:
 def init_stats_service(
     headlines_file: str = "data/output/headlines.jsonl",
     sentiment_file: str = "data/output/sentiment.jsonl",
+    data_dir: str = "data/breaking_news",
     poll_interval: float = 5.0
 ) -> StatsService:
     """
@@ -314,6 +384,7 @@ def init_stats_service(
     Args:
         headlines_file: Path to headlines JSONL file
         sentiment_file: Path to sentiment JSONL file
+        data_dir: Path to breaking news text files directory
         poll_interval: Polling interval in seconds
         
     Returns:
@@ -324,7 +395,36 @@ def init_stats_service(
     _stats_service = StatsService(
         headlines_file=headlines_file,
         sentiment_file=sentiment_file,
+        data_dir=data_dir,
         poll_interval=poll_interval
     )
+    
+    return _stats_service
+
+
+def start_stats_service(global_state, data_dir: str = "data/breaking_news") -> StatsService:
+    """
+    Initialize and start the stats service, updating global state.
+    
+    Args:
+        global_state: The global state object to update with stats
+        data_dir: Directory containing news text files
+        
+    Returns:
+        Started StatsService
+    """
+    global _stats_service
+    
+    _stats_service = StatsService(
+        data_dir=data_dir,
+        poll_interval=5.0
+    )
+    
+    # Register callback to update global state
+    def update_global_state(stats: Dict):
+        global_state.stats.update(stats)
+    
+    _stats_service.register_stats_callback(update_global_state)
+    _stats_service.start()
     
     return _stats_service
