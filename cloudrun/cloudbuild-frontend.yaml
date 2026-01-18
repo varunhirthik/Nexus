@@ -10,7 +10,6 @@ steps:
       - '--build-arg'
       - 'VITE_API_URL=https://nexus-backend-99420505209.asia-south1.run.app'
       - '.'
-    dir: '..'
 
   # Push the frontend image
   - name: 'gcr.io/cloud-builders/docker'

@@ -8,7 +8,6 @@ steps:
       - '-f'
       - 'cloudrun/backend.Dockerfile'
       - '.'
-    dir: '..'
 
   # Push the backend image
   - name: 'gcr.io/cloud-builders/docker'
