@@ -88,6 +88,68 @@ app.add_middleware(
 )
 
 
+# Startup event to initialize services
+@app.on_event("startup")
+async def startup_event():
+    """Initialize RAG service and other components on startup."""
+    import os
+    logger.info("="*60)
+    logger.info("🚀 Starting Nexus API Server...")
+    logger.info("="*60)
+    
+    # Get API key from environment (supports multiple names)
+    api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+    
+    if api_key:
+        logger.info("✓ API Key found, initializing RAG service...")
+        try:
+            from llm.rag_query import init_rag_service
+            init_rag_service(
+                api_key=api_key,
+                model="models/gemini-2.5-flash",
+                temperature=0.7
+            )
+            logger.info("✓ RAG Query Service initialized successfully!")
+        except Exception as e:
+            logger.error(f"✗ Failed to initialize RAG service: {e}")
+    else:
+        logger.warning("✗ No API key found! Set GOOGLE_API_KEY or GEMINI_API_KEY")
+    
+    # Initialize news scheduler if keys are available
+    newsapi_key = os.environ.get("NEWS_API_KEY") or os.environ.get("NEWSAPI_KEY")
+    gnews_key = os.environ.get("GNEWS_API_KEY") or os.environ.get("GNEWS_KEY")
+    
+    if newsapi_key or gnews_key:
+        logger.info("✓ News API keys found, starting news scheduler...")
+        try:
+            from connectors.news_scheduler import init_scheduler
+            scheduler = init_scheduler(
+                newsapi_key=newsapi_key or "",
+                gnews_key=gnews_key or "",
+                poll_interval=600,  # 10 minutes
+                output_dir="../data/breaking_news",
+                keywords=["Tesla", "Bitcoin", "AI", "technology", "stock market"]
+            )
+            scheduler.start()
+            logger.info("✓ News scheduler started!")
+        except Exception as e:
+            logger.error(f"✗ Failed to start news scheduler: {e}")
+    else:
+        logger.warning("✗ No News API keys found, news fetching disabled")
+    
+    # Start stats service
+    try:
+        from services.stats_service import start_stats_service
+        start_stats_service(state, data_dir="../data/breaking_news")
+        logger.info("✓ Stats service started!")
+    except Exception as e:
+        logger.error(f"✗ Failed to start stats service: {e}")
+    
+    logger.info("="*60)
+    logger.info("🎯 Nexus API Server ready!")
+    logger.info("="*60)
+
+
 # WebSocket connection manager
 class ConnectionManager:
     def __init__(self):
