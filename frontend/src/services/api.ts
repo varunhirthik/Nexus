@@ -4,7 +4,22 @@ import axios from 'axios';
 import type { QueryRequest, QueryResponse, NewsArticle, WSMessage, SystemStats } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-const WS_BASE_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
+
+// Derive WebSocket URL from API URL (https -> wss, http -> ws)
+const getWsUrl = () => {
+  const wsEnv = import.meta.env.VITE_WS_URL;
+  if (wsEnv) return wsEnv;
+  
+  // Derive from API URL
+  if (API_BASE_URL.startsWith('https://')) {
+    return API_BASE_URL.replace('https://', 'wss://');
+  } else if (API_BASE_URL.startsWith('http://')) {
+    return API_BASE_URL.replace('http://', 'ws://');
+  }
+  return 'ws://localhost:8000';
+};
+
+const WS_BASE_URL = getWsUrl();
 
 class APIService {
   private ws: WebSocket | null = null;
