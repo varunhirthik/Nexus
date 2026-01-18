@@ -178,8 +178,41 @@ async def get_latest_news(limit: int = 20):
 
 @app.get("/stats")
 async def get_stats():
-    """Get system statistics."""
-    return state.stats
+    """Get system statistics from stats service."""
+    try:
+        from services.stats_service import get_stats_service
+        stats_service = get_stats_service()
+        
+        if stats_service:
+            return stats_service.get_stats()
+        else:
+            # Fallback to basic stats
+            return state.stats
+    except Exception as e:
+        logger.error(f"Error getting stats: {e}")
+        return state.stats
+
+
+@app.get("/sentiment")
+async def get_sentiment():
+    """Get current sentiment data."""
+    try:
+        from services.stats_service import get_stats_service
+        stats_service = get_stats_service()
+        
+        if stats_service:
+            return {
+                "current": stats_service.get_current_sentiment(),
+                "history": stats_service.get_sentiment_history(30)
+            }
+        else:
+            return {
+                "current": {"sentiment_score": 0, "timestamp": 0, "sample_count": 0},
+                "history": []
+            }
+    except Exception as e:
+        logger.error(f"Error getting sentiment: {e}")
+        return {"current": {"sentiment_score": 0}, "history": []}
 
 
 @app.get("/news/status")
@@ -291,6 +324,15 @@ async def query_analyst(request: QueryRequest):
         
         latency_ms = (datetime.now() - start_time).total_seconds() * 1000
         
+        # Record latency for stats
+        try:
+            from services.stats_service import get_stats_service
+            stats_service = get_stats_service()
+            if stats_service:
+                stats_service.record_query_latency(latency_ms)
+        except Exception:
+            pass
+        
         return QueryResponse(
             query=request.query,
             answer=result["answer"],
@@ -325,25 +367,54 @@ async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     
     try:
-        # Send initial state
-        await websocket.send_json({
-            "type": "stats",
-            "data": state.stats
-        })
+        # Send initial stats from stats service
+        try:
+            from services.stats_service import get_stats_service
+            stats_service = get_stats_service()
+            if stats_service:
+                initial_stats = stats_service.get_stats()
+                await websocket.send_json({
+                    "type": "stats",
+                    "data": initial_stats
+                })
+                
+                # Send recent sentiment history
+                sentiment_history = stats_service.get_sentiment_history(10)
+                for sentiment in sentiment_history:
+                    await websocket.send_json({
+                        "type": "sentiment",
+                        "data": sentiment
+                    })
+            else:
+                await websocket.send_json({
+                    "type": "stats",
+                    "data": state.stats
+                })
+        except Exception as e:
+            logger.error(f"Error sending initial WS data: {e}")
+            await websocket.send_json({
+                "type": "stats",
+                "data": state.stats
+            })
         
-        # Keep connection alive
+        # Keep connection alive and send periodic updates
         while True:
-            # Listen for client messages (ping/pong)
             try:
-                data = await asyncio.wait_for(websocket.receive_text(), timeout=1.0)
+                # Listen for client messages with timeout
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
                 logger.debug(f"Received from client: {data}")
             except asyncio.TimeoutError:
-                # Send periodic heartbeat
-                await websocket.send_json({
-                    "type": "heartbeat",
-                    "data": {"timestamp": int(datetime.now().timestamp())}
-                })
-                await asyncio.sleep(30)  # Heartbeat every 30 seconds
+                # Send periodic stats update
+                try:
+                    from services.stats_service import get_stats_service
+                    stats_service = get_stats_service()
+                    if stats_service:
+                        await websocket.send_json({
+                            "type": "stats",
+                            "data": stats_service.get_stats()
+                        })
+                except Exception:
+                    pass
     
     except WebSocketDisconnect:
         manager.disconnect(websocket)
