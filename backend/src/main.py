@@ -18,6 +18,7 @@ from config import settings
 from pipeline.pathway_pipeline import LiveNewsAnalystPipeline
 from connectors.news_scheduler import init_scheduler
 from llm.rag_query import init_rag_service
+from services.stats_service import init_stats_service
 
 # Configure logging
 logging.basicConfig(
@@ -146,6 +147,16 @@ def main():
         )
         logger.info("   → RAG Service ready for AI queries")
         
+        # Initialize Stats Service
+        logger.info("📊 Initializing Stats & Sentiment Service...")
+        stats_service = init_stats_service(
+            headlines_file="data/output/headlines.jsonl",
+            sentiment_file="data/output/sentiment.jsonl",
+            poll_interval=5.0  # Update every 5 seconds
+        )
+        stats_service.start()
+        logger.info("   → Stats Service polling every 5s")
+        
         # Create and run pipeline
         pipeline = LiveNewsAnalystPipeline()
         
@@ -208,6 +219,14 @@ def main():
         logger.info("🛑 Shutting down gracefully...")
         if news_scheduler:
             news_scheduler.stop()
+        # Stop stats service
+        try:
+            from services.stats_service import get_stats_service
+            stats_svc = get_stats_service()
+            if stats_svc:
+                stats_svc.stop()
+        except Exception:
+            pass
         logger.info("="*60)
         sys.exit(0)
     
