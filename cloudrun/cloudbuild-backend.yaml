@@ -5,8 +5,6 @@ steps:
       - 'build'
       - '-t'
       - 'asia-south1-docker.pkg.dev/$PROJECT_ID/nexus-repo/nexus-backend:latest'
-      - '-t'
-      - 'asia-south1-docker.pkg.dev/$PROJECT_ID/nexus-repo/nexus-backend:$SHORT_SHA'
       - '-f'
       - 'cloudrun/backend.Dockerfile'
       - '.'
@@ -18,14 +16,8 @@ steps:
       - 'push'
       - 'asia-south1-docker.pkg.dev/$PROJECT_ID/nexus-repo/nexus-backend:latest'
 
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - 'push'
-      - 'asia-south1-docker.pkg.dev/$PROJECT_ID/nexus-repo/nexus-backend:$SHORT_SHA'
-
 images:
   - 'asia-south1-docker.pkg.dev/$PROJECT_ID/nexus-repo/nexus-backend:latest'
-  - 'asia-south1-docker.pkg.dev/$PROJECT_ID/nexus-repo/nexus-backend:$SHORT_SHA'
 
 options:
   machineType: 'N1_HIGHCPU_8'
