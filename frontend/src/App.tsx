@@ -67,12 +67,33 @@ function App() {
 
   const fetchInitialData = async () => {
     try {
-      const [newsData, statsData] = await Promise.all([
+      const [newsData, statsData, sentimentResponse] = await Promise.all([
         APIService.getLatestNews(20),
         APIService.getSystemStats(),
+        APIService.getSentimentData(),
       ]);
       setArticles(newsData);
       setStats(statsData);
+      
+      // Set sentiment data from history
+      if (sentimentResponse.history && sentimentResponse.history.length > 0) {
+        setSentimentData(sentimentResponse.history.map(s => {
+          // Parse timestamp to create window label
+          let windowLabel = '';
+          try {
+            const date = new Date(s.timestamp);
+            windowLabel = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          } catch {
+            windowLabel = 'N/A';
+          }
+          
+          return {
+            timestamp: Date.now(),
+            sentiment_score: s.sentiment_score,
+            window_label: windowLabel
+          };
+        }));
+      }
     } catch (error) {
       console.error('Failed to fetch initial data:', error);
     }
