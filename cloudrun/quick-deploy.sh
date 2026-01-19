@@ -28,7 +28,10 @@ gcloud config set project $PROJECT_ID --quiet
 # ==========================================
 echo ""
 echo -e "${YELLOW}[1/3] Building backend with Cloud Build...${NC}"
-gcloud builds submit --config cloudrun/cloudbuild-backend.yaml . --quiet
+gcloud builds submit --config cloudrun/cloudbuild-backend.yaml . --async || {
+    echo -e "${YELLOW}Build submitted asynchronously. Waiting 30s for image to be ready...${NC}"
+    sleep 30
+}
 
 echo -e "${YELLOW}[2/3] Deploying backend to Cloud Run...${NC}"
 gcloud run deploy $BACKEND_SERVICE \
