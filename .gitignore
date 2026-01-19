@@ -23,9 +23,13 @@ wheels/
 .installed.cfg
 *.egg
 
-# Environment variables
+# Environment variables - NEVER commit real API keys!
 .env
 .env.local
+.env.production
+backend/.env
+deployment/.env
+*/.env
 
 # IDEs
 .vscode/
