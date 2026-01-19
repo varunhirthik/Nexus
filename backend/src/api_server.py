@@ -283,7 +283,7 @@ async def get_latest_news(limit: int = 20):
     from pathlib import Path
     from datetime import datetime as _dt
     
-    headlines_file = "data/output/headlines.jsonl"
+    headlines_file = "../data/output/headlines.jsonl"
     articles = []
 
     def _read_breaking_texts(dir_path: str):
@@ -354,7 +354,7 @@ async def get_latest_news(limit: int = 20):
 
         # 2) If no articles found, fall back to reading breaking_news text files
         if not articles:
-            articles = _read_breaking_texts("data/breaking_news")
+            articles = _read_breaking_texts("../data/breaking_news")
 
         # Normalize and sort by published/timestamp
         def _ts_key(a):
@@ -521,7 +521,7 @@ async def query_analyst(request: QueryRequest):
             # Try to load from headlines file
             import os
             import json as json_module
-            headlines_file = "data/output/headlines.jsonl"
+            headlines_file = "../data/output/headlines.jsonl"
             if os.path.exists(headlines_file):
                 with open(headlines_file, 'r', encoding='utf-8') as f:
                     for line in f:
