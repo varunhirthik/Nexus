@@ -1,7 +1,30 @@
 """
 FastAPI server for REST and WebSocket endpoints.
 
-This module provides HTTP/WebSocket interfaces for the Pathway pipeline,
+This module provides HT# FastAPI app
+app = FastAPI(
+    title="Live News Analyst API",
+    description="Real-time news analysis powered by Pathway and Gemini",
+    version="1.0.0"
+)
+
+# Import settings for CORS configuration
+from config import settings as app_settings
+
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS middleware - configure allowed origins from settings for security
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=app_settings.allowed_origins_list,
+    allow_credentials=False,  # Set to False when using specific origins for security
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)aces for the Pathway pipeline,
 enabling the React frontend to query and receive real-time updates.
 """
 
@@ -15,6 +38,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import uvicorn
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 logger = logging.getLogger(__name__)
 
@@ -82,11 +108,14 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware - must be added FIRST and handle all origins
+# Import settings for CORS configuration
+from config import settings as app_settings
+
+# CORS middleware - configure allowed origins from settings for security
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,  # Set to False when using allow_origins=["*"]
+    allow_origins=app_settings.allowed_origins_list,
+    allow_credentials=False,  # Set to False when using specific origins for security
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["*"],
@@ -165,58 +194,67 @@ async def startup_event():
     except Exception as e:
         logger.error(f"✗ Failed to start stats service: {e}")
     
-    # Start keyword alert monitoring in background
-    asyncio.create_task(monitor_keyword_alerts())
-    logger.info("✓ Keyword alert monitoring started!")
+    # Initialize and start keyword alert service
+    try:
+        from services.alert_service import init_alert_service
+        from config import settings as cfg
+        
+        alert_service = init_alert_service(
+            keywords=cfg.alert_keyword_list,
+            threshold=cfg.alert_threshold,
+            window_minutes=10  # 10 minute window
+        )
+        logger.info(f"✓ Alert service initialized with {len(cfg.alert_keyword_list)} keywords!")
+        
+        # Start background alert monitoring
+        asyncio.create_task(monitor_keyword_alerts())
+        logger.info("✓ Keyword alert monitoring started!")
+    except Exception as e:
+        logger.error(f"✗ Failed to start alert service: {e}")
     
     logger.info("="*60)
     logger.info("🎯 Nexus API Server ready!")
     logger.info("="*60)
 
 
-# Alert keywords to monitor
-ALERT_KEYWORDS = ["Tesla", "Bitcoin", "Fed", "inflation", "AI", "crash", "China", "market"]
-
-
 async def monitor_keyword_alerts():
-    """Background task to monitor articles for keyword alerts."""
-    last_check_count = 0
+    """Background task to monitor articles for keyword alerts using AlertService."""
+    from services.alert_service import get_alert_service
+    
+    last_article_count = 0
     
     while True:
         try:
-            await asyncio.sleep(30)  # Check every 30 seconds
+            await asyncio.sleep(15)  # Check every 15 seconds
             
-            if len(state.articles) > last_check_count:
-                # Check new articles for keywords
-                new_articles = state.articles[:len(state.articles) - last_check_count]
-                last_check_count = len(state.articles)
+            alert_service = get_alert_service()
+            if not alert_service:
+                continue
+            
+            # Process new articles
+            current_article_count = len(state.articles)
+            
+            if current_article_count > last_article_count:
+                # Get new articles (those we haven't processed yet)
+                new_articles = state.articles[last_article_count:current_article_count]
+                last_article_count = current_article_count
                 
                 for article in new_articles:
-                    title = article.get("title", "").lower()
-                    content = article.get("content", "").lower()
-                    text = f"{title} {content}"
+                    # Process article and get any new alerts
+                    new_alerts = alert_service.process_article(article)
                     
-                    triggered_keywords = []
-                    for keyword in ALERT_KEYWORDS:
-                        if keyword.lower() in text:
-                            triggered_keywords.append(keyword)
-                    
-                    if triggered_keywords:
-                        alert = {
-                            "type": "keyword",
-                            "keywords": triggered_keywords,
-                            "article_title": article.get("title", "Unknown"),
-                            "source": article.get("source", "Unknown"),
-                            "timestamp": int(datetime.now().timestamp())
-                        }
-                        state.alerts.append(alert)
+                    # Broadcast new alerts via WebSocket
+                    for alert in new_alerts:
+                        alert_dict = alert.to_dict()
+                        state.alerts.append(alert_dict)
                         
-                        # Broadcast alert via WebSocket
                         await manager.broadcast({
                             "type": "alert",
-                            "data": alert
+                            "data": alert_dict
                         })
-                        logger.info(f"🚨 Alert triggered: {triggered_keywords} in '{article.get('title', '')[:50]}...'")
+                        
+                        logger.info(f"🚨 Broadcast alert: {alert.keyword} ({alert.count} mentions)")
+            
         except Exception as e:
             logger.error(f"Error in keyword monitoring: {e}")
             await asyncio.sleep(60)  # Wait longer on error
@@ -276,7 +314,8 @@ async def health_check():
 
 
 @app.get("/news/latest")
-async def get_latest_news(limit: int = 20):
+@limiter.limit(f"{app_settings.rate_limit_news_per_minute}/minute" if app_settings.rate_limit_enabled else "1000/minute")
+async def get_latest_news(request: Request, limit: int = 20):
     """Get latest news articles from Pathway output files."""
     import os
     import json
@@ -428,12 +467,35 @@ async def get_sentiment():
 
 @app.get("/alerts")
 async def get_alerts():
-    """Get current keyword alerts."""
-    return {
-        "alerts": state.alerts[-20:] if state.alerts else [],
-        "keywords": ["Tesla", "Bitcoin", "Fed", "inflation", "AI", "crash"],
-        "last_update": int(datetime.now().timestamp())
-    }
+    """Get current keyword alerts from AlertService."""
+    try:
+        from services.alert_service import get_alert_service
+        from config import settings as cfg
+        
+        alert_service = get_alert_service()
+        
+        if alert_service:
+            # Get alerts from service
+            alerts = alert_service.get_active_alerts(limit=20)
+            keywords = cfg.alert_keyword_list
+        else:
+            # Fallback to state-based alerts
+            alerts = state.alerts[-20:] if state.alerts else []
+            keywords = cfg.alert_keyword_list
+        
+        return {
+            "alerts": alerts,
+            "keywords": keywords,
+            "last_update": int(datetime.now().timestamp())
+        }
+    except Exception as e:
+        logger.error(f"Error getting alerts: {e}")
+        return {
+            "alerts": [],
+            "keywords": [],
+            "last_update": int(datetime.now().timestamp()),
+            "error": str(e)
+        }
 
 
 @app.get("/news/status")
@@ -460,7 +522,8 @@ async def get_news_api_status():
 
 
 @app.post("/news/fetch")
-async def trigger_news_fetch():
+@limiter.limit("1/minute")  # Very restrictive - manual trigger only
+async def trigger_news_fetch(request: Request):
     """Manually trigger a news fetch from APIs."""
     try:
         from connectors.news_scheduler import get_scheduler
@@ -485,7 +548,8 @@ async def trigger_news_fetch():
 
 
 @app.post("/query", response_model=QueryResponse)
-async def query_analyst(request: QueryRequest):
+@limiter.limit(f"{app_settings.rate_limit_query_per_minute}/minute" if app_settings.rate_limit_enabled else "1000/minute")
+async def query_analyst(request: Request, query_request: QueryRequest):
     """
     Query the RAG system with AI-powered news analysis.
     
@@ -506,7 +570,7 @@ async def query_analyst(request: QueryRequest):
             # RAG service not initialized - return helpful message
             latency_ms = (datetime.now() - start_time).total_seconds() * 1000
             return QueryResponse(
-                query=request.query,
+                query=query_request.query,
                 answer="I'm still warming up! The AI service is initializing. Please try again in a few seconds.",
                 context=[],
                 latency_ms=latency_ms,
@@ -537,7 +601,7 @@ async def query_analyst(request: QueryRequest):
         # Query the RAG service
         result = await asyncio.get_event_loop().run_in_executor(
             None,
-            lambda: rag_service.query(request.query, articles)
+            lambda: rag_service.query(query_request.query, articles)
         )
         
         # Format context for response
@@ -555,7 +619,7 @@ async def query_analyst(request: QueryRequest):
             pass
         
         return QueryResponse(
-            query=request.query,
+            query=query_request.query,
             answer=result["answer"],
             context=context,
             latency_ms=latency_ms,
@@ -567,7 +631,7 @@ async def query_analyst(request: QueryRequest):
         # Return a user-friendly error
         latency_ms = (datetime.now() - start_time).total_seconds() * 1000
         return QueryResponse(
-            query=request.query,
+            query=query_request.query,
             answer=f"I encountered an issue while analyzing that. Please try rephrasing your question or try again in a moment.",
             context=[],
             latency_ms=latency_ms,
