@@ -61,6 +61,14 @@ class Settings(BaseSettings):
     # File Watcher Configuration
     breaking_news_dir: str = "data/breaking_news"
     
+    # CORS Configuration (Security)
+    allowed_origins: str = "http://localhost:5173,http://localhost:3000"
+    
+    # Rate Limiting Configuration
+    rate_limit_enabled: bool = True
+    rate_limit_query_per_minute: int = 10
+    rate_limit_news_per_minute: int = 30
+    
     @property
     def rss_feed_list(self) -> List[str]:
         """Parse RSS feeds from comma-separated string."""
@@ -95,6 +103,11 @@ class Settings(BaseSettings):
     def effective_gnews_key(self) -> Optional[str]:
         """Get GNews key (supports both naming conventions)."""
         return self.gnews_key or self.gnews_api_key
+    
+    @property
+    def allowed_origins_list(self) -> List[str]:
+        """Parse allowed CORS origins from comma-separated string."""
+        return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
 
 
 # Global settings instance
