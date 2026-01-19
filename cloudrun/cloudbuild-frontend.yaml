@@ -8,7 +8,7 @@ steps:
       - '-f'
       - 'cloudrun/frontend.Dockerfile'
       - '--build-arg'
-      - 'VITE_API_URL=https://nexus-backend-99420505209.asia-south1.run.app'
+      - 'VITE_API_URL=${_BACKEND_URL}'
       - '.'
 
   # Push the frontend image
